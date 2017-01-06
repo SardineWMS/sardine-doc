@@ -1,3 +1,3 @@
-## 主要原则
+## 示意图
 
-- 基本动画，动效的重要性与有意义的动效。
+<img src="./images/demo.png" width="100%" class="content-img"/>
