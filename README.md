@@ -6,6 +6,6 @@
 玉钩双语燕，宝甃杨花转。几处簸钱声，绿窗春睡轻。
 
 ## Sardine相关文档 
-#### [Sardine设计文档](http://motion.ant.design/exhibition/demo/list-anim);
+#### [Sardine设计文档](./sardine-design/Demo.md);
 #### [Sardine操作原型](http://motion.ant.design/exhibition/demo/detail-switch);
 #### [Sardine参考文档](http://motion.ant.design/exhibition/demo/list-sort);
