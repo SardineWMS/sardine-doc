@@ -12,6 +12,8 @@
 .primary_button {
   color:#FFFFFF;
 }
+.image {
+}
 .heading_1 {
   font-family:'Arial Normal', 'Arial';
   font-weight:bold;
@@ -96,7 +98,7 @@
 }
 .ellipse {
 }
-.image {
+.image1 {
   color:#000000;
 }
 .placeholder {
@@ -131,4 +133,8 @@
 ._图片 {
 }
 ._形状 {
+}
+.flow_shape {
+}
+.shape1 {
 }
