@@ -1,4 +1,4 @@
-﻿// 8.0.0.3323. Generated 12/13/2016 7:03:57 PM UTC
+﻿// 8.0.0.3333. Generated 3/30/2017 8:15:37 PM UTC
 
 //***** messagecenter.js *****//
 if (typeof console == 'undefined') console = {
@@ -443,8 +443,8 @@ $axure.internal(function($ax) {
 
     var _descriptionToKey = { 'OnFocus': 'onFocus', 'OnLostFocus': 'onLostFocus' };
     var _createProxies = function(diagramObject, elementId) {
-        var createFocus = _needsProxy(elementId, 'onFocus');
-        var createLostFocus = _needsProxy(elementId, 'onLostFocus');
+        var createFocus = _needsProxy(diagramObject, elementId, 'onFocus');
+        var createLostFocus = _needsProxy(diagramObject, elementId, 'onLostFocus');
 
         if(!createFocus && !createLostFocus) return;
 
@@ -502,9 +502,9 @@ $axure.internal(function($ax) {
         if(events[event]) ++events[event];
         else events[event] = 1;
         return function() { _unblockEvent(id, event); };
-    }    
+    }
 
-    var _isSuppressedEvent = function (id, event) {
+    var _isSuppressedEvent = function(id, event) {
         var suppressedEvents = _suppressedEvents[id];
         var blockedEvents = _blockedEvents[id];
         return (suppressedEvents && suppressedEvents.indexOf(event) != -1) || (blockedEvents && blockedEvents[event]);
@@ -521,6 +521,14 @@ $axure.internal(function($ax) {
             events.pop();
         }
     }
+    var _unblockEvent = function(id, event) {
+        var events = _blockedEvents[id];
+        if(events) {
+            if(--events[event] > 0) return;
+        }
+        _removeSuppressedEvent(id, event);
+    }
+
     var _unblockEvent = function(id, event) {
         var events = _blockedEvents[id];
         if(events) {
@@ -690,6 +698,7 @@ $axure.internal(function($ax) {
                         $ax.messageCenter.postMessage('axEventComplete');
 
                         var bubble = $ax.action.dispatchAction(copy, axEventObject.cases[j].actions);
+                        $ax.action.flushAllResizeMoveActions(copy);
                         $('#' + linksId).remove();
                         return bubble;
                     };
@@ -854,8 +863,7 @@ $axure.internal(function($ax) {
         _layerToFocusableWidget[elementId] = mainId;
     }
 
-    var _needsProxy = function(id, proxyName) {
-        var obj = $obj(id);
+    var _needsProxy = function(obj, id, proxyName) {
         // layers don't need on focus ever, proxies will handle them
         if ($ax.public.fn.IsLayer(obj.type)) return false;
         // If you already focus you don't need to force yourself to proxy.
@@ -905,33 +913,22 @@ $axure.internal(function($ax) {
     // suppressed event maps to true if it is supressed
     var suppressedEventStatus = {};
 
-    // Attempt at a generic way to supress events
-    var initSuppressingEvents = function(query) {
+    var initSuppressingEvents = function () {
         suppressingEvents['OnLongClick'] = 'OnClick';
         cancelSuppressions['onMouseDown'] = 'OnClick';
 
         // Have to cancel suppressed event here. Only works for non-synthetic events currently
         for(var key in cancelSuppressions) {
-            var eventName = AXURE_TO_JQUERY_EVENT_NAMES[key];
-            if(!eventName) continue;
-            (function(eventName, suppressed) {
-                query.bind(eventName, function() {
-                    suppressedEventStatus[suppressed] = false;
-                });
-            })(eventName, cancelSuppressions[key]);
+            var jEventName = AXURE_TO_JQUERY_EVENT_NAMES[key];
+            if(!jEventName) continue;
+            $('body').bind(jEventName, function () {
+                suppressedEventStatus[cancelSuppressions[key]] = false;
+            });
         }
-
-        // Otherwise see if you have the chance to cancel a supression
-        //        if(cancelSuppressions[eventDescription]) {
-        //            suppressedEventStatus[cancelSuppressions[eventDescription]] = false;
-        //        }
     };
 
     // TODO: It may be a good idea to split this into multiple functions, or at least pull out more similar functions into private methods
     var _initializeObjectEvents = function(query, allowItem) {
-        // Must init the supressing eventing before the handlers, so that it has the ability to supress those events.
-        initSuppressingEvents(query);
-        
         query.each(function(dObj, elementId) {
             var $element = $jobj(elementId);
             var itemId = $ax.repeater.getItemIdFromElementId(elementId);
@@ -939,8 +936,8 @@ $axure.internal(function($ax) {
             // Focus has to be done before on focus fires
             // Set up focus
             if ($ax.public.fn.IsTextArea(dObj.type) || $ax.public.fn.IsTextBox(dObj.type) || $ax.public.fn.IsCheckBox(dObj.type) || $ax.public.fn.IsRadioButton(dObj.type) ||
-                $ax.public.fn.IsListBox(dObj.type) || $ax.public.fn.IsComboBox(dObj.type) || $ax.public.fn.IsButton(dObj.type) || $ax.public.fn.IsImageBox(dObj.type) ||
-                $ax.public.fn.IsVector(dObj.type) || $ax.IsTreeNodeObject(dObj.type) || $ax.public.fn.IsTableCell(dObj.type)) {
+                $ax.public.fn.IsListBox(dObj.type) || $ax.public.fn.IsComboBox(dObj.type) || $ax.public.fn.IsButton(dObj.type) ||
+                (dObj.tabbable && ($ax.public.fn.IsImageBox(dObj.type) || $ax.public.fn.IsVector(dObj.type) || $ax.IsTreeNodeObject(dObj.type) || $ax.public.fn.IsTableCell(dObj.type)))) {
                 var focusObj = $jobj($ax.event.getFocusableWidgetOrChildId(elementId));
                 focusObj.focus(function() {
                     window.lastFocusedControl = elementId;
@@ -953,7 +950,7 @@ $axure.internal(function($ax) {
                 _attachEvents(dObj, elementId, isDynamicPanel);
             };
 
-            if(IE) {
+            if (IE || $axure.browser.isEdge) {
                 $element.mouseenter(function() {
                     _enteredWidgets[elementId] = true;
                 }).mouseleave(function() {
@@ -961,81 +958,28 @@ $axure.internal(function($ax) {
                 });
             }
 
-            //attach button shape alternate styles
-            var needsMouseFilter = dObj.type != 'hyperlink' && !$ax.public.fn.IsLayer(dObj.type) && !isDynamicPanel && dObj.type != 'richTextPanel' &&
-                !$ax.public.fn.IsRepeater(dObj.type) && !$ax.public.fn.IsCheckBox(dObj.type) && !$ax.public.fn.IsRadioButton(dObj.type) && !$ax.public.fn.IsTreeNodeObject(dObj.type);
-            if(needsMouseFilter) {
-                $element.mouseenter(function() {
-                    var elementId = this.id;
-                    var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
-                    if(parent && parent.direct) return;
-                    if($.inArray(elementId, _event.mouseOverIds) != -1) return;
-                    _event.mouseOverIds[_event.mouseOverIds.length] = elementId;
-
-                    if(elementId == _event.mouseOverObjectId) return;
-                    _event.mouseOverObjectId = elementId;
-                    $ax.style.SetWidgetHover(elementId, true);
-                    var textId = $ax.style.GetTextIdFromShape(elementId);
-                    if(textId) $ax.annotation.updateLinkLocations(textId);
-                }).mouseleave(function() {
-                    var elementId = this.id;
-                    var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
-                    if(parent && parent.direct) return;
-                    $ax.splice(_event.mouseOverIds, $.inArray(elementId, _event.mouseOverIds), 1);
-
-                    if(elementId == _event.mouseOverObjectId) {
-                        _event.mouseOverObjectId = '';
-                    }
-                    $ax.style.SetWidgetHover(elementId, false);
-                    var textId = $ax.style.GetTextIdFromShape(elementId);
-                    if(textId) $ax.annotation.updateLinkLocations(textId);
-                });
-
-                $element.bind($ax.features.eventNames.mouseDownName, function() {
-                    var elementId = this.id;
-                    var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
-                    if(parent) {
-                        dynamicPanelMouseDown(parent.id);
-                        if(parent.direct) return;
-                    }
-                    _event.mouseDownObjectId = elementId;
-
-                    $ax.style.SetWidgetMouseDown(this.id, true);
-                    $ax.annotation.updateLinkLocations($ax.style.GetTextIdFromShape(elementId));
-                }).bind($ax.features.eventNames.mouseUpName, function() {
-                    var elementId = this.id;
-                    var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
-                    if(parent) {
-                        dynamicPanelMouseUp(parent.id);
-                        if(parent.direct) return;
-                    }
-                    _event.mouseDownObjectId = '';
-                    if(!$ax.style.ObjHasMouseDown(elementId)) return;
-
-                    $ax.style.SetWidgetMouseDown(elementId, false);
-                    $ax.annotation.updateLinkLocations($ax.style.GetTextIdFromShape(elementId));
-
-                    //there used to be something we needed to make images click, because swapping out the images prevents the click
-                    // this is a note that we can eventually delete.
-                });
-
-            }
+            _attachIxStyleEvents(dObj, elementId, $element);
 
             var $axElement = undefined;
-            var preeval = itemId && !allowItem;
+            // Unless you are pre eval - don't allow item and have an item id - then set enabled/selected through js as usual
+            if(allowItem || !itemId) {
+                //initialize disabled elements, do this first before selected, cause if a widget is disabled, we don't want to apply selected style anymore
+                if(($ax.public.fn.IsVector(dObj.type) || $ax.public.fn.IsImageBox(dObj.type) || isDynamicPanel || $ax.public.fn.IsLayer(dObj.type)) && dObj.disabled) {
+                    if(!$axElement) $axElement = $ax('#' + elementId);
+                    $axElement.enabled(false);
+                }
 
-            //initialize disabled elements, do this first before selected, cause if a widget is disabled, we don't want to apply selected style anymore
-            if (($ax.public.fn.IsVector(dObj.type) || $ax.public.fn.IsImageBox(dObj.type) || isDynamicPanel || $ax.public.fn.IsLayer(dObj.type))
-                && dObj.disabled && !preeval) {
-                if (!$axElement) $axElement = $ax('#' + elementId);
-                $axElement.enabled(false);
-            }
-
-            // Initialize selected elements if not in repeater
-            if(($ax.public.fn.IsVector(dObj.type) || $ax.public.fn.IsImageBox(dObj.type) || isDynamicPanel || $ax.public.fn.IsLayer(dObj.type))
-                && dObj.selected && !preeval) {
-                if(!$axElement) $axElement = $ax('#' + elementId);
-                $axElement.selected(true);
+                // Initialize selected elements if not in repeater
+                if(($ax.public.fn.IsVector(dObj.type) || $ax.public.fn.IsImageBox(dObj.type) || isDynamicPanel || $ax.public.fn.IsLayer(dObj.type)) && dObj.selected) {
+                    if(!$axElement) $axElement = $ax('#' + elementId);
+                    $axElement.selected(true);
+                }
+            } else {
+                // Otherwise everything should be set up correctly by pre-eval, except disabled is needed
+                if($element.hasClass('disabled')) {
+                    $axElement = $ax('#' + elementId);
+                    $axElement.enabled(false);
+                }
             }
 
             if(OS_MAC && WEBKIT) {
@@ -1249,24 +1193,6 @@ $axure.internal(function($ax) {
                 }
                 $ax.dynamicPanelManager.propagateMouseOver(elementId, false);
             };
-            var dynamicPanelMouseDown = function(elementId) {
-                var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
-                if(parent) {
-                    dynamicPanelMouseDown(parent.id);
-                    if(parent.direct) return;
-                }
-                _event.mouseDownObjectId = elementId;
-                $ax.dynamicPanelManager.propagateMouseDown(elementId, true);
-            };
-            var dynamicPanelMouseUp = function(elementId) {
-                var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
-                if(parent) {
-                    dynamicPanelMouseUp(parent.id);
-                    if(parent.direct) return;
-                }
-                _event.mouseDownObjectId = '';
-                $ax.dynamicPanelManager.propagateMouseDown(elementId, false);
-            };
 
             //attach handlers for button shape and tree node mouse over styles
             // TODO: Can this really be removed? Trees seem to work with out (the generic hover case works for it).
@@ -1392,7 +1318,7 @@ $axure.internal(function($ax) {
             };
 
             // Highjack key up and key down to keep track of state of keyboard.
-            _event.initKeyEvents($element);
+            if($ax.event.HasKeyUpOrDown(dObj)) _event.initKeyEvents($element);
 
             // Attach synthetic onTextChange event to textbox and textarea elements
             if ($ax.event.HasTextChanged(dObj)) {
@@ -1502,6 +1428,108 @@ $axure.internal(function($ax) {
         });
     }
     $ax.initializeObjectEvents = _initializeObjectEvents;
+
+    $ax.event.updateIxStyleEvents = function(elementId) {
+        _dettachIxStyleEvents(elementId);
+        _attachIxStyleEvents($ax.getObjectFromElementId(elementId), elementId, $jobj(elementId), true);
+    }
+
+    var _dettachIxStyleEvents = function(elementId) {
+        var $element = $jobj(elementId);
+        $element.off('mouseenter.ixStyle')
+            .off('mouseleave.ixStyle')
+            .off($ax.features.eventNames.mouseDownName + '.ixStyle')
+            .off($ax.features.eventNames.mouseUpName + '.ixStyle');
+    }
+
+    var _attachIxStyleEvents = function(dObj, elementId, $element, ignoreHasIxStyles) {
+        //attach button shape alternate styles
+        var isDynamicPanel = $ax.public.fn.IsDynamicPanel(dObj.type);
+        var needsMouseFilter = (ignoreHasIxStyles || $ax.event.HasIxStyles(dObj))
+            && dObj.type != 'hyperlink' && !$ax.public.fn.IsLayer(dObj.type) && !isDynamicPanel && dObj.type != 'richTextPanel' &&
+            !$ax.public.fn.IsRepeater(dObj.type) && !$ax.public.fn.IsCheckBox(dObj.type) && !$ax.public.fn.IsRadioButton(dObj.type)
+            && !$ax.public.fn.IsTreeNodeObject(dObj.type);
+        if(needsMouseFilter) {
+            //$element.mouseenter(function () {
+            $element.on('mouseenter.ixStyle', function () {
+                var elementId = this.id;
+                var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
+                if(parent && parent.direct) return;
+                if($.inArray(elementId, _event.mouseOverIds) != -1) return;
+                _event.mouseOverIds[_event.mouseOverIds.length] = elementId;
+
+                if(elementId == _event.mouseOverObjectId) return;
+                _event.mouseOverObjectId = elementId;
+                $ax.style.SetWidgetHover(elementId, true);
+                var textId = $ax.style.GetTextIdFromShape(elementId);
+                if(textId) $ax.annotation.updateLinkLocations(textId);
+            //}).mouseleave(function () {
+            }).on('mouseleave.ixStyle', function () {
+                var elementId = this.id;
+                var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
+                if(parent && parent.direct) return;
+                $ax.splice(_event.mouseOverIds, $.inArray(elementId, _event.mouseOverIds), 1);
+
+                if(elementId == _event.mouseOverObjectId) {
+                    _event.mouseOverObjectId = '';
+                }
+                $ax.style.SetWidgetHover(elementId, false);
+                var textId = $ax.style.GetTextIdFromShape(elementId);
+                if(textId) $ax.annotation.updateLinkLocations(textId);
+            });
+
+            //$element.bind($ax.features.eventNames.mouseDownName, function () {
+            $element.on($ax.features.eventNames.mouseDownName + '.ixStyle', function () {
+                var elementId = this.id;
+                var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
+                if(parent) {
+                    dynamicPanelMouseDown(parent.id);
+                    if(parent.direct) return;
+                }
+                _event.mouseDownObjectId = elementId;
+
+                $ax.style.SetWidgetMouseDown(this.id, true);
+                $ax.annotation.updateLinkLocations($ax.style.GetTextIdFromShape(elementId));
+            //}).bind($ax.features.eventNames.mouseUpName, function () {
+            }).on($ax.features.eventNames.mouseUpName + '.ixStyle', function () {
+                var elementId = this.id;
+                var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
+                if(parent) {
+                    dynamicPanelMouseUp(parent.id);
+                    if(parent.direct) return;
+                }
+                _event.mouseDownObjectId = '';
+                if(!$ax.style.ObjHasMouseDown(elementId)) return;
+
+                $ax.style.SetWidgetMouseDown(elementId, false);
+                $ax.annotation.updateLinkLocations($ax.style.GetTextIdFromShape(elementId));
+
+                //there used to be something we needed to make images click, because swapping out the images prevents the click
+                // this is a note that we can eventually delete.
+            });
+
+        }
+    };
+
+    var dynamicPanelMouseDown = function (elementId) {
+        var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
+        if(parent) {
+            dynamicPanelMouseDown(parent.id);
+            if(parent.direct) return;
+        }
+        _event.mouseDownObjectId = elementId;
+        $ax.dynamicPanelManager.propagateMouseDown(elementId, true);
+    };
+
+    var dynamicPanelMouseUp = function (elementId) {
+        var parent = $ax.dynamicPanelManager.parentHandlesStyles(elementId);
+        if(parent) {
+            dynamicPanelMouseUp(parent.id);
+            if(parent.direct) return;
+        }
+        _event.mouseDownObjectId = '';
+        $ax.dynamicPanelManager.propagateMouseDown(elementId, false);
+    };
 
     // Handle key up and key down events
     (function() {
@@ -1789,6 +1817,8 @@ $axure.internal(function($ax) {
         // Make sure key events for page are initialized first. That way they will update the value of key pressed before any other events occur.
         _event.initKeyEvents($(window));
 
+        initSuppressingEvents();
+
         // Anything with an item id is in a repeater and should be handled by that repeater.
         _initializeObjectEvents($ax(function(obj, elementId) { return !$ax.repeater.getItemIdFromElementId(elementId); }));
 
@@ -1803,6 +1833,16 @@ $axure.internal(function($ax) {
         });
     };
     _event.initialize = _initialize;
+
+    $ax.event.HasIxStyles = function(diagramObject) {
+        if(diagramObject.style.stateStyles) return true;
+        if(diagramObject.adaptiveStyles) {
+            for(var viewId in diagramObject.adaptiveStyles) {
+                if(diagramObject.adaptiveStyles[viewId].stateStyles) return true;
+            }
+        }
+        return false;
+    };
 
     $ax.event.HasTextChanged = function(diagramObject) {
         if (!$ax.public.fn.IsTextBox(diagramObject.type) && !$ax.public.fn.IsTextArea(diagramObject.type)) return false;
@@ -1822,6 +1862,12 @@ $axure.internal(function($ax) {
         if (!$ax.public.fn.IsListBox(diagramObject.type) && !$ax.public.fn.IsComboBox(diagramObject.type)) return false;
         var map = diagramObject.interactionMap;
         return map && map.onSelectionChange;
+    };
+
+    $ax.event.HasKeyUpOrDown = function (diagramObject) {
+        if($ax.public.fn.IsTextBox(diagramObject.type) || $ax.public.fn.IsTextArea(diagramObject.type)) return true;
+        var map = diagramObject.interactionMap;
+        return map && (map.onKeyUp || map.onKeyDown);
     };
 
     $ax.event.HasCheckedChanged = function(diagramObject) {
@@ -1948,16 +1994,17 @@ $axure.internal(function($ax) {
             if(_callFilterCheck(callFilter, $ax.constants.PAGE_TYPE)) {
                 var map = $ax.pageData.page.interactionMap;
                 var currentEvent = $ax.getjBrowserEvent();
-                var pageEventInfo = $ax.getEventInfoFromEvent(currentEvent, skipShowDescription, '');
-
-                pageEventInfo.label = $ax.pageData.page.name;
-                pageEventInfo.friendlyType = 'Page';
 
                 var pageEvent = map && map[eventName];
                 var scrolling = currentEvent && currentEvent.type === "scroll";
                 if (scrolling && !pageEvent && map) pageEvent = map.onScrollUp || map.onScrollDown;
 
-                if (pageEvent) {
+                if(pageEvent) {
+                    var pageEventInfo = $ax.getEventInfoFromEvent(currentEvent, skipShowDescription, '');
+
+                    pageEventInfo.label = $ax.pageData.page.name;
+                    pageEventInfo.friendlyType = 'Page';
+
                     if (!scrolling || map.onScroll) _handleEvent('', pageEventInfo, pageEvent, skipShowDescription, synthetic);
 
                     if (scrolling) {
@@ -3460,7 +3507,7 @@ $axure.internal(function($ax) {
                         func: function() {
                             //$ax.event.raiseSyntheticEvent(childId, 'onResize');
                             if(isLayer) {
-                                completeCount--;
+                                completeCount -= 2;
                                 _fireAnimationFromQueue(childId, queueTypes.resize);
                                 $ax.event.raiseSyntheticEvent(childId, 'onResize');
                             } else {
@@ -4079,6 +4126,8 @@ $axure.internal(function($ax) {
                     var currIndex = $ax.event.mouseOverIds.indexOf($ax.event.mouseOverObjectId);
                     var imgIndex = $ax.event.mouseOverIds.indexOf(elementId);
                     if(currIndex < imgIndex) $ax.event.mouseOverObjectId = elementId;
+                } else if(imgInfo.mouseOver && elementId == eventInfo.srcElement) {
+                    img = evaluatedImgs.mouseOver;
                 }
 
                 //            $('#' + $ax.repeater.applySuffixToElementId(elementId, '_img')).attr('src', img);
@@ -4087,6 +4136,8 @@ $axure.internal(function($ax) {
                 //Set up overrides
                 $ax.style.mapElementIdToImageOverrides(elementId, evaluatedImgs);
                 $ax.style.updateElementIdImageStyle(elementId);
+
+                if(evaluatedImgs.mouseOver || evaluatedImgs.mouseDown) $ax.event.updateIxStyleEvents(elementId);
             }
         }
         eventInfo.targetElement = oldTarget;
@@ -4163,6 +4214,7 @@ $axure.internal(function($ax) {
         //look for the nearest element id
 
         var objId = eventInfo.srcElement;
+        var thisWidget = eventInfo.thiswidget;
         var obj = $ax.getObjectFromElementId(objId);
         var rdoId = obj ? $ax.getRdoParentFromElementId(objId) : "";
         var rdo = $ax.getObjectFromElementId(rdoId);
@@ -4185,6 +4237,7 @@ $axure.internal(function($ax) {
                 var targetObj = isPage ? rdo : $ax.getObjectFromElementId(targetObjId);
 
                 eventInfo.srcElement = targetObjId || '';
+                eventInfo.thiswidget = $ax.getWidgetInfo(eventInfo.srcElement);
 
                 eventInfo.isMasterEvent = false;
                 var raisedEvents = firedEvent.raisedEventIds;
@@ -4212,6 +4265,7 @@ $axure.internal(function($ax) {
                 if(isPage) eventInfo.isMasterEvent = oldIsMasterEvent;
             }
             eventInfo.srcElement = objId;
+            eventInfo.thiswidget = thisWidget;
 
             eventInfo.isMasterEvent = oldIsMasterEvent;
         }
@@ -5811,17 +5865,17 @@ $axure.internal(function($ax) {
             return $ax.public.fn.IsRepeater(obj.type) && !_loaded[repeaterId];
         }).each(function(obj, repeaterId) {
             _refreshRepeater(repeaterId, undefined, true);
-            // Fix selected and default if necessary
-            var states = obj.evaluatedStates[repeaterId];
-            if(!states) return; // If there are no evaluated states the repeater id key could not be mapped to an array of states.
+            //// Fix selected and default if necessary
+            //var states = obj.evaluatedStates[repeaterId];
+            //if(!states) return; // If there are no evaluated states the repeater id key could not be mapped to an array of states.
 
-            for(var i = 0; i < states.length; i++) {
-                var state = states[i];
+            //for(var i = 0; i < states.length; i++) {
+            //    var state = states[i];
 
-                $ax.style.SetWidgetEnabled(state.id, true); // So selected will take place. If disabled, selected wouldn't happen.
-                $ax.style.SetWidgetSelected(state.id, state.selected);
-                $ax.style.SetWidgetEnabled(state.id, !state.disabled);
-            }
+            //    $ax.style.SetWidgetEnabled(state.id, true); // So selected will take place. If disabled, selected wouldn't happen.
+            //    $ax.style.SetWidgetSelected(state.id, state.selected);
+            //    $ax.style.SetWidgetEnabled(state.id, !state.disabled);
+            //}
         });
     };
     _repeaterManager.initRefresh = _initRepeaters;
@@ -5975,7 +6029,7 @@ $axure.internal(function($ax) {
             var startLeft = paddingLeft;
             if(repeaterObj.css('box-sizing') == 'border-box') {
                 startTop -= $ax.getNumFromPx(repeaterObj.css('border-top-width')) || 0;
-                startLeft -= $ax.getNumFromPx(repeaterObj.css('border-left-width')) || 0
+                startLeft -= $ax.getNumFromPx(repeaterObj.css('border-left-width')) || 0;
             }
             var top = startTop;
             var left = startLeft;
@@ -5997,6 +6051,16 @@ $axure.internal(function($ax) {
                 useAlt = !useAlt;
                 copy.attr('id', itemElementId);
                 copy.html(div.html().replace(/(id|for)="?u([0-9]+(p([0-9]){3})?(_[_a-z0-9]*)?)"?/g, processId));
+                if(obj.repeaterPropMap.isolateRadio) {
+                    var radioButtons = copy.find(':radio');
+                    for(var radioIndex = 0; radioIndex < radioButtons.length; radioIndex++) {
+                        var radio = $(radioButtons[radioIndex]);
+                        var oldName = radio.attr('name') || '';
+                        // Can't use create element id because there could be an underscore in name
+                        if(oldName) radio.attr('name', oldName + '-' + itemId);
+                    }
+                }
+                
 
                 copy.css({
                     'position': 'absolute',
@@ -6050,14 +6114,11 @@ $axure.internal(function($ax) {
             var childObj = $obj(id);
             var childJobj = $jobj(id);
             var childItemId = _getItemIdFromElementId(id);
-            if (obj.repeaterPropMap.isolateRadio && $ax.public.fn.IsRadioButton(childObj.type)) {
-                var input = $jobj(_applySuffixToElementId(id, '_input'));
-                input.attr('name', _createElementId(input.attr('name'), childItemId));
-                if($ax.ieColorManager) $ax.ieColorManager.applyBackground($ax('#' + id));
-            }
+            
             if(obj.repeaterPropMap.isolateSelection && childJobj.attr('selectiongroup')) {
                 childJobj.attr('selectiongroup', _createElementId(childJobj.attr('selectiongroup'), childItemId));
             }
+            if ($ax.ieColorManager) $ax.ieColorManager.applyBackground($ax('#' + id));
             $ax.style.initializeObjectTextAlignment($ax('#' + id));
             $ax.applyHighlight($ax('#' + id), true);
         }
@@ -6678,7 +6739,7 @@ $axure.internal(function($ax) {
                 else repeaterDelta = 0;
             }
 
-            _updateRepeaterSize(prop, repeaterObj, repeaterDelta);
+            _updateRepeaterSize(prop, repeaterObj, repeaterDelta, vert);
 
             if(!suppressFire) $ax.event.raiseSyntheticEvent(_createElementId(repeaterId, itemId), 'onItemResize');
             return;
@@ -6726,7 +6787,7 @@ $axure.internal(function($ax) {
             }
 
             if (repeaterDelta) {
-                _updateRepeaterSize(prop, repeaterObj, repeaterDelta);
+                _updateRepeaterSize(prop, repeaterObj, repeaterDelta, vert);
             }
 
             // Done the hard part, calculating/updating new repeater size. Now just resize items and find what to push.
@@ -6764,7 +6825,7 @@ $axure.internal(function($ax) {
             delta = afterSize - beforeSize;
 
             // Repeater resize secondary is determined by the effective delta.
-            _updateRepeaterSize(prop, repeaterObj, delta);
+            _updateRepeaterSize(prop, repeaterObj, delta, vert);
         }
 
         for(i = 0; i < itemIdsEffected.length; i++) {
@@ -6779,11 +6840,13 @@ $axure.internal(function($ax) {
         if(!suppressFire) $ax.event.raiseSyntheticEvent(_createElementId(repeaterId, itemId), 'onItemResize');
     }
 
-    var _updateRepeaterSize = function(prop, jobj, delta) {
+    var _updateRepeaterSize = function(prop, jobj, delta, vert) {
         if (delta == 0) return;
         var val = $ax.getNumFromPx(jobj.css(prop)) + delta;
-        var border = $ax.getNumFromPx(jobj.css('border-width')) || 0;
-        val += border * 2;
+        var border = 0;
+        if(vert) border += $ax.getNumFromPx(jobj.css('border-top-width')) + $ax.getNumFromPx(jobj.css('border-bottom-width'));
+        else border += $ax.getNumFromPx(jobj.css('border-left-width')) + $ax.getNumFromPx(jobj.css('border-right-width'));
+        val += border;
         jobj.css(prop, val);
         $ax.dynamicPanelManager.fitParentPanel(jobj.attr('id'));
     }
@@ -6874,7 +6937,7 @@ $axure.internal(function($ax) {
             var visibleData = repeaterToCurrentDataSet[repeaterId];
             items = [];
             var oldTarget = eventInfo.targetElement;
-            for(var i = 0; i < visibleData.length; i++) {
+            for(var i = 0; i < visibleData.length + deleteDataMap.deletedIds.length; i++) {
                 var index = i + 1;
                 if(deleteDataMap.deletedIds.indexOf(index) != -1) continue;
 
@@ -7086,7 +7149,7 @@ $axure.internal(function($ax) {
 
         var parentLayer = getParentLayer(widgetId);
         if(parentLayer) {
-            if(_updateLayerSizeCache(parentLayer)) _fitParentPanel(parentLayer);
+            if(_updateLayerRectCache(parentLayer)) _fitParentPanel(parentLayer);
             return;
         }
 
@@ -7289,23 +7352,39 @@ $axure.internal(function($ax) {
     //    }
     //};
 
-    var _getCachedLayerSize = function (elementId) {
+    var _getCachedLayerRect = function (elementId) {
         var element = document.getElementById(elementId);
-        var size = {};
-        size.width = Number(element.getAttribute('data-width'));
-        size.height = Number(element.getAttribute('data-height'));
-        return size;
+        var rect = {};
+        rect.width = Number(element.getAttribute('data-width'));
+        rect.height = Number(element.getAttribute('data-height'));
+        rect.x = Number(element.getAttribute('data-left'));
+        rect.y = Number(element.getAttribute('data-top'));
+        return rect;
     }
 
-    var _updateLayerSizeCache = function (elementId, size) {
-        var oldSize = _getCachedLayerSize(elementId);
-        if(!size) size = $ax('#' + elementId).size();
+    var _updateLayerRectCache = function (elementId) {
+        var oldRect = _getCachedLayerRect(elementId);
 
-        if(oldSize.width != size.width || oldSize.height != size.height) {
+        var axObj = $ax('#' + elementId);
+        var size = axObj.size();
+        var loc = {};
+        loc.x = axObj.locRelativeIgnoreLayer(false);
+        loc.y = axObj.locRelativeIgnoreLayer(true);
+        
+        var sizeChange = oldRect.width != size.width || oldRect.height != size.height;
+        var locChange = oldRect.x != loc.x || oldRect.y != loc.y;
+        if(sizeChange || locChange) {
             var element = document.getElementById(elementId);
-            element.setAttribute('data-width', size.width);
-            element.setAttribute('data-height', size.height);
-            $ax.event.raiseSyntheticEvent(elementId, 'onResize');
+            if(sizeChange) {
+                element.setAttribute('data-width', size.width);
+                element.setAttribute('data-height', size.height);
+                $ax.event.raiseSyntheticEvent(elementId, 'onResize');
+            }
+            if(locChange) {
+                element.setAttribute('data-left', loc.x);
+                element.setAttribute('data-top', loc.y);
+                $ax.event.raiseSyntheticEvent(elementId, 'onMove');
+            }
             return true;
         }
         return false;
@@ -8786,8 +8865,8 @@ $axure.internal(function($ax) {
         if(options.easing == 'none') {
             query.animate(cssStyles, { duration: 0, queue: false });
 
-            if(animationCompleteCallback) animationCompleteCallback();
             if(rootLayer) $ax.visibility.popContainer(rootLayer, false);
+            if(animationCompleteCallback) animationCompleteCallback();
             //if this widget is inside a layer, we should just remove the layer from the queue
             if(shouldFire) $ax.action.fireAnimationFromQueue(id, $ax.action.queueTypes.move);
         } else {
@@ -9726,6 +9805,7 @@ $axure.internal(function($ax) {
         var count = containerCount[id];
         if(count) containerCount[id] = count + 1;
         else {
+            var trapScroll = _trapScrollLoc(id);
             var jobj = $jobj(id);
             var children = jobj.children();
             var css = {
@@ -9807,6 +9887,7 @@ $axure.internal(function($ax) {
                 }
                 _setCurrFocus(focus);
             }
+            trapScroll();
         }
     };
 
@@ -9816,6 +9897,8 @@ $axure.internal(function($ax) {
         count--;
         containerCount[id] = count;
         if(count != 0) return;
+
+        var trapScroll = _trapScrollLoc(id);
 
         var jobj = $jobj(id);
         var container = $ax.visibility.applyWidgetContainer(id, true);
@@ -9902,7 +9985,24 @@ $axure.internal(function($ax) {
             }
         }
         container.remove();
+        trapScroll();
     };
+
+    var _trapScrollLoc = function(id) {
+        var locs = {};
+        var states = $jobj(id).find('.panel_state');
+        for(var i = 0; i < states.length; i++) {
+            var state = $(states[i]);
+            locs[state.attr('id')] = { x: state.scrollLeft(), y: state.scrollTop() };
+        }
+        return function() {
+            for(var key in locs) {
+                var state = $jobj(key);
+                state.scrollLeft(locs[key].x);
+                state.scrollTop(locs[key].y);
+            }
+        };
+    }
 
     var _getCurrFocus = function () {
         // Only care about focused a tags and inputs
@@ -10439,6 +10539,7 @@ $axure.internal(function($ax) {
         if(obj) {
             var actionId = id;
             if ($ax.public.fn.IsDynamicPanel(obj.type) || $ax.public.fn.IsLayer(obj.type)) {
+                if(!value) $jobj(id).removeClass('selected');
                 var children = $axure('#' + id).getChildren()[0].children;
                 for(var i = 0; i < children.length; i++) {
                     var childId = children[i];
@@ -10610,7 +10711,7 @@ $axure.internal(function($ax) {
         var hasBorderWidth = borderWidth > 0;
         if(hasBorderWidth) {
             borderQuery.css('border-style', 'solid');
-            borderQuery.css('border-width', borderWidth + 'px');
+            borderQuery.css('border-width', borderWidth + 'px'); // If images start being able to turn off borders on specific sides, need to update this.
             borderQuery.css('width', style.size.width - borderWidth * 2);
             borderQuery.css('height', style.size.height - borderWidth * 2);
         }
@@ -11065,8 +11166,7 @@ $axure.internal(function($ax) {
             if (parentObj['leftTextPadding']) leftParam = parentObj['leftTextPadding'];
             if (parentObj['rightTextPadding']) rightParam = parentObj['rightTextPadding'];
 
-            // for now all this smart shapes weird shit is mutually exclusive from compound vectors.
-
+            // smart shapes are mutually exclusive from compound vectors.
             isConnector = parentObj.type == $ax.constants.CONNECTOR_TYPE;
         }
         if (isConnector) return;
@@ -12162,36 +12262,40 @@ $axure.internal(function($ax) {
         });
 
         window.lastFocusedClickable = null;
-        var _lastFocusedClickableSelector = 'div[tabIndex=0], img[tabIndex=0], input, a';
+        var _lastFocusedClickableSelector = 'input, a';
         var shouldOutline = true;
 
         $ax(function (dObj) { return dObj.tabbable; }).each(function (dObj, elementId) {
             if ($ax.public.fn.IsLayer(dObj.type)) $ax.event.layerMapFocus(dObj, elementId);
             var focusableId = $ax.event.getFocusableWidgetOrChildId(elementId);
-            $('#' + focusableId).attr("tabIndex", 0);
-        });
-
-        $('div[tabIndex=0], img[tabIndex=0]').bind($ax.features.eventNames.mouseDownName, function() {
-            shouldOutline = false;
+            var $focusable = $('#' + focusableId);
+            $focusable.attr("tabIndex", 0);
+            if($focusable.is('div') || $focusable.is('img')) {
+                $focusable.bind($ax.features.eventNames.mouseDownName, function() {
+                    shouldOutline = false;
+                });
+                attachFocusAndBlur($focusable);
+            }
         });
 
         $(window.document).bind($ax.features.eventNames.mouseUpName, function() {
             shouldOutline = true;
         });
 
-        $(_lastFocusedClickableSelector).focus(function () {
-            if(shouldOutline) {
-                $(this).css('outline', '');
-            } else {
-                $(this).css('outline', 'none');
-            }
+        attachFocusAndBlur($(_lastFocusedClickableSelector));
 
-            window.lastFocusedClickable = this;
-        });
-
-        $(_lastFocusedClickableSelector).blur(function () {
-            if(window.lastFocusedClickable == this) window.lastFocusedClickable = null;
-        });
+        function attachFocusAndBlur($query) {
+            $query.focus(function () {
+                if(shouldOutline) {
+                    $(this).css('outline', '');
+                } else {
+                    $(this).css('outline', 'none');
+                }
+                window.lastFocusedClickable = this;
+            }).blur(function () {
+                if(window.lastFocusedClickable == this) window.lastFocusedClickable = null;
+            });
+        }
 
         $(window.document).bind('keyup', function(e) {
             if(e.keyCode == '13' || e.keyCode == '32') {
@@ -12489,9 +12593,9 @@ $axure.internal(function($ax) {
         while(!current.is('body') && !current.is('html')) {
             var elementId = current.attr('id');
             var diagramObject = elementId && $ax.getObjectFromElementId(elementId);
-            if (diagramObject && $ax.public.fn.IsDynamicPanel(diagramObject.type) && diagramObject.scrollbars != 'none') {
+            if(diagramObject && $ax.public.fn.IsDynamicPanel(diagramObject.type) && diagramObject.scrollbars != 'none') {
                 //returns the panel diagram div which handles scrolling
-                return window.document.getElementById(last.attr('id'));
+                return $ax.dynamicPanelManager.getShownState(current.attr('id'))[0];
             }
             last = current;
             current = current.parent();
