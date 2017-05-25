@@ -8,5 +8,7 @@
 
 #### [入库流程](in/in.md)
 
+#### [出库流程](delivery/delivery.md)
+
 #### [内部流程](inner/inner.md)
 
