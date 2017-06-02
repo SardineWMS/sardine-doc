@@ -1,4 +1,4 @@
-﻿// 8.0.0.3333. Generated 3/30/2017 8:15:37 PM UTC
+﻿// 8.0.0.3323. Generated 12/13/2016 7:03:57 PM UTC
 
 //***** axQuery.js *****//
 $axure = function(query) {
@@ -1518,11 +1518,8 @@ $axure.internal(function($ax) {
             $rtfObj.children('p').each(function(index) {
                 if(index != 0) textOut += '\n';
 
-                var htmlContent = $(this).html();
-                if(isSoloBr(htmlContent)) return; // It has a solo br, then it was just put in for a newline, and paragraph already added the new line.
-
                 //Replace line breaks (set in SetWidgetRichText) with newlines and nbsp's with regular spaces.
-                htmlContent = htmlContent.replace(/<br[^>]*>/ig, '\n').replace(/&nbsp;/ig, ' ');
+                var htmlContent = $(this).html().replace(/<br[^>]*>/ig, '\n').replace(/&nbsp;/ig, ' ');
                 textOut += $(htmlContent).text();
             });
 
@@ -1531,14 +1528,6 @@ $axure.internal(function($ax) {
             var val = idQuery.val();
             return val == undefined ? '' : val;
         }
-    };
-
-    var isSoloBr = function(html) {
-        html = $(html);
-        // Html needs one and only one span
-        var spanChildren = html.length == 1 && html.is('span') ? html.children() : false;
-        // Span children needs exactly one br and no text in the span
-        return spanChildren && spanChildren.length == 1 && spanChildren.is('br') && spanChildren.text().trim() == '';
     };
 
     $ax.public.fn.setRichTextHtml = function() {
@@ -1983,62 +1972,45 @@ $axure.internal(function($ax) {
                 var parentId = $ax.visibility.getWidgetFromContainer(parents[i]);
                 var parent = $ax.visibility.applyWidgetContainer(parentId, true);
 
-                // Layer may not have container, and will be at 0,0 otherwise.
-                if (!parent.length) continue;
 
-                fixed = _fixedOffset(parentId, vert);
-                if(fixed.valid) {
-                    loc += fixed.offset;
-                    break; // If fixed ignore any parents if there are any, they don't matter.
-                } else loc += $ax.getNumFromPx(parent.css(prop));
+            // Layer may not have container, and will be at 0,0 otherwise.
+            if (!parent.length) continue;
+
+            fixed = _fixedOffset(parentId, vert);
+            if(fixed.valid) {
+                loc += fixed.offset;
+                break; // If fixed ignore any parents if there are any, they don't matter.
+            } else loc += $ax.getNumFromPx(parent.css(prop));
             }
         }
 
+        //if (high) loc += isCompound ? dimension[dim] : obj[dim]();
         if (high) loc += obj[dim]();
 
         // Special Layer code
         if ($ax.getTypeFromElementId(id) == 'layer') {
-            // If layer has a container, then use that. Otherwise must deal with children. Children can move in container after created, but ignoring for now.
+            // If layer has a container, then use that. Otherwise must deal with children
             var container = $ax.visibility.applyWidgetContainer(id, true, true);
-            if(container.length) loc += $ax.getNumFromPx(container.css(prop));
-            else loc += (_getChildLoc($obj(id).objs, vert, high, dim, true, id) || 0);
+            if(container.length) loc = $ax.getNumFromPx(container.css(prop));
+            else {
+                var first = true;
+                var children = $obj(id).objs;
+                for(var i = 0; i < children.length; i++) {
+                    var childId = $ax.getElementIdFromPath([children[i].id], { relativeTo: id });
+                    if(!childId) continue;
+                    var childProp = _getLoc(childId, vert, high, relative);
+                    if(first) loc = childProp;
+                    else loc = Math[mathFunc](loc, childProp);
+                    first = false;
+                }
+            }
         }
 
         if(displaySet) obj.css('display', oldDisplay);
+
+        //        var body = $('body');
+        //        if (body.css('position') == 'relative') loc -= (Number(body.css(loc).replace('px', '')) + Math.max(0, ($(window).width() - body.width()) / 2));
         return loc;
-    };
-
-    var _getChildLoc = function (children, vert, high, dim, root, path, itemId) {
-        if (typeof (path) == 'string') {
-            itemId = $ax.repeater.getItemIdFromElementId(path);
-            path = $ax.getPathFromScriptId(path);
-            path.pop(); // Remove object id, only want rdo path.
-        }
-        var mathFunc = high ? 'max' : 'min';
-        var childLoc = NaN;
-        for (var i = 0; i < children.length; i++) {
-            var childObj = children[i];
-            var childId = $ax.getElementIdFromPath([childObj.id], { relativeTo: path });
-            if (!childId) continue;
-            childId = $ax.repeater.createElementId(childId, itemId);
-            if($ax.public.fn.IsReferenceDiagramObject(childObj.type)) {
-                path.push(childObj.id);
-                var childProp = _getChildLoc($ax.pageData.masters[$obj(childId).masterId].diagram.objects, vert, high, dim, false, path, itemId);
-                path.pop();
-                if(isNaN(childProp)) continue;
-            } else if($ax.public.fn.IsLayer(childObj.type)) {
-                childProp = _getChildLoc(childObj.objs, vert, high, dim, false, path, itemId);
-            } else {
-                if(!$ax.visibility.IsIdVisible(childId)) continue;
-                childProp = $ax('#' + childId).locRelativeIgnoreLayer(vert);
-                if(high) childProp += $jobj(childId)[dim]();
-            }
-
-            if(isNaN(childLoc)) childLoc = childProp;
-            else if(!isNaN(childProp)) childLoc = Math[mathFunc](childLoc, childProp);
-        }
-
-        return root && isNaN(childLoc) ? 0 : childLoc;
     };
 
     var _fixedOffset = function (id, vert) {
@@ -2067,8 +2039,8 @@ $axure.internal(function($ax) {
             loc = $ax.getNumFromPx(query.css(vert ? 'top' : 'left'));
         }
 
-        var scrollKey = 'scroll' + (vert ? 'Top' : 'Left');
-        return { offset: $(window)[scrollKey]() + loc, valid: true, fullWidth: axObj.percentWidth == 1 };
+        var scrollKey = 'scroll' + (vert ? 'Y' : 'X');
+        return { offset: window[scrollKey] + loc, valid: true, fullWidth: axObj.percentWidth == 1 };
     };
 
     var _displayWidget = function(id) {
