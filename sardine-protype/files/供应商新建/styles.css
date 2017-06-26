@@ -3,7 +3,7 @@
   background-image:none;
   position:static;
   left:auto;
-  width:948px;
+  width:996px;
   margin-left:0;
   margin-right:0;
   text-align:left;
@@ -784,6 +784,106 @@
   left:2px;
   top:-8px;
   width:914px;
+  visibility:hidden;
+  word-wrap:break-word;
+}
+#u941 {
+  border-width:0px;
+  position:absolute;
+  left:0px;
+  top:0px;
+  width:0px;
+  height:0px;
+}
+#u942_div {
+  border-width:0px;
+  position:absolute;
+  left:0px;
+  top:0px;
+  width:81px;
+  height:24px;
+  background:inherit;
+  background-color:rgba(255, 255, 255, 0);
+  border:none;
+  border-radius:0px;
+  -moz-box-shadow:none;
+  -webkit-box-shadow:none;
+  box-shadow:none;
+  font-family:'Microsoft YaHei Regular', 'Microsoft YaHei';
+  font-weight:400;
+  font-style:normal;
+  font-size:12px;
+  color:#666666;
+  text-align:right;
+  line-height:18px;
+}
+#u942 {
+  border-width:0px;
+  position:absolute;
+  left:595px;
+  top:153px;
+  width:81px;
+  height:24px;
+  font-family:'Microsoft YaHei Regular', 'Microsoft YaHei';
+  font-weight:400;
+  font-style:normal;
+  font-size:12px;
+  color:#666666;
+  text-align:right;
+  line-height:18px;
+}
+#u943 {
+  border-width:0px;
+  position:absolute;
+  left:0px;
+  top:4px;
+  width:73px;
+  word-wrap:break-word;
+}
+#u944_div {
+  border-width:0px;
+  position:absolute;
+  left:0px;
+  top:0px;
+  width:320px;
+  height:24px;
+  background:inherit;
+  background-color:rgba(255, 255, 255, 1);
+  box-sizing:border-box;
+  border-width:1px;
+  border-style:solid;
+  border-color:rgba(217, 217, 217, 1);
+  border-radius:4px;
+  -moz-box-shadow:none;
+  -webkit-box-shadow:none;
+  box-shadow:none;
+  font-family:'Microsoft YaHei Regular', 'Microsoft YaHei';
+  font-weight:400;
+  font-style:normal;
+  font-size:12px;
+  color:#CCCCCC;
+  text-align:left;
+}
+#u944 {
+  border-width:0px;
+  position:absolute;
+  left:676px;
+  top:153px;
+  width:320px;
+  height:24px;
+  font-family:'Microsoft YaHei Regular', 'Microsoft YaHei';
+  font-weight:400;
+  font-style:normal;
+  font-size:12px;
+  color:#CCCCCC;
+  text-align:left;
+}
+#u945 {
+  border-width:0px;
+  position:absolute;
+  left:8px;
+  top:5px;
+  width:312px;
   visibility:hidden;
   word-wrap:break-word;
 }
